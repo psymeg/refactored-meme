@@ -1,0 +1,109 @@
+---
+title: "Chose Your Own Project - Machine Learning Submission"
+subtitle: "HarvardX Data Science Capstone - PH125.9x"
+author: "Simon Gibson"
+date: "`r Sys.Date()`"
+output: pdf_document
+number_sections: true
+toc: true
+---
+  
+## Introduction
+
+For the 9th Course in the HarvardX Data Science course we have been asked to create two recommendation systems. The first was a Movie Recommendation System using the MovieLens dataset. The second is a "Choose your Own Project." For this a we are targetting a Workforce Recommendation System - mixing weather forecasts with Police 911 call information to see if it is possible to predict Police staffing requirements based on weather based trends.
+
+We are using the Seattle Police Department 911 Incident Response data set found here : https://www.kaggle.com/datasets/sohier/seattle-police-department-911-incident-response
+
+For Weather data we will use National Oceanic and Atmospheric Administration (NOAA) data. Michael Minns' tutorial is inciteful for weather analysis. It can be found here: https://michaelminn.net/tutorials/r-weather/index.html This weather data does not appear to be available via an api call or similar and is quite a manual download process. Due to download constraints we will be using a locally sourced dataset covering the years 2001 to 2002.
+
+In order to test the results of the recommendation system we are using the root-mean-square error (RMSE) to measure the difference between the values predicted by the model and the observed values.
+
+## Method
+
+The first step is to clear any set variables so we do not introduce anything unexpected into the data we are working with.
+
+```{r clear, echo=FALSE}
+#clear R variables
+#rm(list = ls ())
+```
+
+Then we install the packages required to manipulate the data.
+
+```{r packageInstall, echo=TRUE, results="hide", message=FALSE}
+####################################################
+# This code is divided into the following sections #
+# 1. Install required packages                     #
+# 2. edx code for creating data sets               #
+# 3. Data set exploration                          #
+####################################################
+
+##########################################################
+# 1. Install required packages and download data            #
+##########################################################
+
+# Note: this process takes a couple of minutes
+
+if(!require(tidyverse)) install.packages("tidyverse", repos = "https://cran.us.r-project.org")
+if(!require(caret)) install.packages("caret", repos = "https://cran.us.r-project.org")
+if(!require(dplyr)) install.packages("dplyr", repos = "https://cran.us.r-project.org") 
+if(!require(kableExtra)) install.packages("kableExtra", repos = "https://cran.us.r-project.org")
+if(!require(lubridate)) install.packages("lubridate", repos = "https://cran.us.r-project.org")
+if(!require(scales)) install.packages("scales", repos = "https://cran.us.r-project.org")
+if(!require(stringr)) install.packages("stringr", repos = "https://cran.us.r-project.org")
+if(!require(readr)) install.packages("readr", repos = "https://cran.us.r-project.org")
+
+library(tidyverse)
+library(caret)
+library(dplyr)
+library(kableExtra)
+library(lubridate)
+library(scales)
+library(stringr)
+library(readr)
+```
+
+Following that, the data is downloaded and then divided into 2 sets. The first set is used to train the algorithm and the second set is used to validate the algorithm. By dividing the data the problem of over-training and thus producing skewed results can be avoided.
+
+The creation of the 2 sets involves the following steps. Initially required packages are installed if not installed and then loaded. Next the data is downloaded if the zip files are not found. Column names are set and the data is converted into forms more easily processed. Then the data is joined. Finally the joined data is split into 2 sets - the edx set used to train the algorithm and the final_holdout_test set that will be used to validate the algorithm and calculate the final RMSE score.
+
+```{r dataDownload, echo=TRUE, results="hide", message=FALSE, warning=FALSE}
+
+#Seattle Police Department 911 Incident Response
+#https://www.kaggle.com/datasets/sohier/seattle-police-department-911-incident-response/download?datasetVersionNumber=1
+
+#National Oceanic and Atmospheric Administration (NOAA) data
+#https://www.ncei.noaa.gov/orders/cdo/3533326.csv
+
+options(timeout = 120)
+
+dl <- "archive.zip"
+if(!file.exists(dl))
+  download.file("https://www.kaggle.com/datasets/sohier/seattle-police-department-911-incident-response/download?datasetVersionNumber=1", dl)
+
+dl <- "3533326.csv"
+if(!file.exists(dl))
+  download.file("https://www.ncei.noaa.gov/orders/cdo/3533326.csv", dl)
+
+```
+
+``` {r loadData, echo=TRUE, results="hide", message=FALSE, warning=TRUE}
+
+#Load Seattle 0911 Call data
+Seattle_911 <- read_csv("Seattle_Police_Department_911_Incident_Response.csv")
+#Load weather data
+Weather <- read_csv("3533326.csv")
+```
+
+##Data Investigation
+
+``` {r dataHead}
+head(Seattle_911)
+
+head(Weather)
+```
+
+``` {r dataSummary}
+summary(Seattle_911)
+
+summary(Weather)
+```
