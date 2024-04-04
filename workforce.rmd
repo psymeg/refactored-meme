@@ -49,8 +49,13 @@ if(!require(dplyr)) install.packages("dplyr", repos = "https://cran.us.r-project
 if(!require(kableExtra)) install.packages("kableExtra", repos = "https://cran.us.r-project.org")
 if(!require(lubridate)) install.packages("lubridate", repos = "https://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "https://cran.us.r-project.org")
-if(!require(stringr)) install.packages("stringr", repos = "https://cran.us.r-project.org")
-if(!require(readr)) install.packages("readr", repos = "https://cran.us.r-project.org")
+if(!require(stringr)) install.packages("stringr", repos = "http://cran.us.r-project.org")
+if(!require(readr)) install.packages("readr", repos = "http://cran.us.r-project.org")
+if(!require(xts)) install.packages("xts", repos = "http://cran.us.r-project.org")
+if(!require(tsbox)) install.packages("tsbox", repos = "http://cran.us.r-project.org")
+if(!require(forecast)) install.packages("forecast", repos = "http://cran.us.r-project.org")
+if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
+if(!require(measurements)) install.packages("measurements", repos = "http://cran.us.r-project.org")
 
 library(tidyverse)
 library(caret)
@@ -60,6 +65,12 @@ library(lubridate)
 library(scales)
 library(stringr)
 library(readr)
+library(xts)
+library(tsbox)
+library(forecast)
+library(data.table)
+library(measurements)
+
 ```
 
 Following that, the data is downloaded and then divided into 2 sets. The first set is used to train the algorithm and the second set is used to validate the algorithm. By dividing the data the problem of over-training and thus producing skewed results can be avoided.
@@ -91,15 +102,50 @@ if(!file.exists(dl))
 #Load Seattle 0911 Call data
 Seattle_911 <- read_csv("Seattle_Police_Department_911_Incident_Response.csv")
 #Load weather data
-Weather <- read_csv("3533326.csv")
+Weather <- read.csv("3533326.csv", as.is=T)
 ```
 
 ##Data Investigation
 
-``` {r dataHead}
-head(Seattle_911)
-
+``` {r dataInvWeather}
 head(Weather)
+
+names(Weather)
+
+min(range(Weather$DATE))
+
+max(range(Weather$DATE))
+```
+Our data range starts from `r min(range(Weather$DATE))` and ends `r max(range(Weather$DATE))`. 
+``` {r Seattle_Weather}
+#Seattle_Weather <- xts(Weather["Weather$STATION" == 'USC00450872',c("TMAX","TMIN","PRCP")], order.by=as.Date(Weather$DATE))
+Seattle_Weather <- xts(Weather[,c("NAME","STATION","DATE","TMAX","TMIN","PRCP")], order.by=as.Date(Weather$DATE))
+
+Seattle_Weather <- as.data.frame(Seattle_Weather)
+#Seattle_Weather = window(Seattle_Weather, start=as.Date("2000-01-01"), end=as.Date("2002-12-31"))
+
+class(Seattle_Weather)
+Seattle_Weather$DATE <- as.Date(Seattle_Weather$DATE)
+Seattle_Weather$PRCP <- as.numeric(Seattle_Weather$PRCP)
+
+#Convert Precipitation from Imperial to Metric
+Seattle_Weather$PRCP <- conv_unit(Seattle_Weather$PRCP, "inch", "mm")
+
+
+Seattle_Weather$TMAX <- as.numeric(Seattle_Weather$TMAX)
+Seattle_Weather$TMIN <- as.numeric(Seattle_Weather$TMIN)
+#hist(x = Seattle_Weather$TMIN, xlab = "Precipitation", ylab ='Frequency of readings', main = #paste("NOAA recordings per year"))
+
+ggplot(Seattle_Weather, aes(x=Seattle_Weather$DATE,y=Seattle_Weather$PRCP)) +
+  geom_line() +
+  xlab("Date") +
+  ylab("Daily Rainfall (Millimeters)") 
+
+```
+We have data from `r n_distinct(Weather$STATION)` stations: `r unique(Weather$NAME)`. Of `r length(Seattle_Weather$PRCP)` rainfall measurements, `r length(which(Seattle_Weather$PRCP!=0))` recorded rainfall, and `r length(which(Seattle_Weather$PRCP==0))` recorded no rainfall. The maximum rainfall during this period was `r max(Seattle_Weather$PRCP, na.rm =T)`mm which fell on `r Seattle_Weather[which.max(Seattle_Weather$PRCP), "DATE"]`. Heavy rainfall is defined by NIWA as rainfall of over 100mm in 24 hours and this occurred  `r length(which(Seattle_Weather$PRCP>=100))` times during the period we have data for.
+
+``` {r SeattleDivide}
+Seattle_Weather %>% group_by(Seattle_Weather$STATION)
 ```
 
 ``` {r dataSummary}
@@ -107,3 +153,63 @@ summary(Seattle_911)
 
 summary(Weather)
 ```
+
+``` {r SplitStations}
+# Group Data by weather station
+weather_data_grouped <- Seattle_Weather %>%
+  group_by(STATION)
+
+# find average maximum temperature  
+average_max_temp <- weather_data_grouped %>%
+  summarise(avg_max_temp = mean(TMAX, na.rm = TRUE))
+
+# Get unique station codes
+station_codes <- unique(Seattle_Weather$STATION)
+
+# Create a list to store data frames for each station
+station_data_list <- list()
+
+# Loop through each station code and filter data for that station
+for (station_code in station_codes) {
+  station_data <- filter(Seattle_Weather, STATION == station_code)
+  station_data_list[[station_code]] <- station_data
+}
+ggplot(station_data_list[["USC00450872"]], aes(x=DATE, y=TMAX)) +
+ geom_line() + 
+ theme_bw()
+ 
+ USC00450872 <- station_data_list[["USC00450872"]]
+ 
+historical = xts(USC00450872[,c("TMAX","TMIN","PRCP")], order.by=as.Date(USC00450872$DATE))
+
+historical = ts_regular(historical)
+
+historical = suppressWarnings(na.fill(historical, "extend"))
+
+historical = window(historical, start=as.Date("2000-01-01"), end=as.Date("2020-12-31")) 
+
+
+
+plot(ts_ts(historical$TMAX), col="darkred", bty="n", las=1, fg=NA, 
+	ylim=c(-20, 120), ylab="Temperature (F)")
+
+lines(ts_ts(historical$TMIN), col="navy")
+
+grid(nx=NA, ny=NULL, lty=1, col="gray")
+
+legend("topright", fill=c("darkred", "navy"), cex=0.7,
+	legend=c("TMAX", "TMIN"), bg="white")
+
+barplot(historical$PRCP, border=NA, col="darkgreen", ylim=c(0, 2),
+	space=0, bty="n", las=1, fg=NA, ylab="Daily Rainfall (inches)")
+
+grid(nx=NA, ny=NULL, lty=1)
+
+```
+
+## References
+
+1. 
+2. 
+3.
+4. https://www.neonscience.org/resources/learning-hub/tutorials/da-viz-coop-precip-data-r
