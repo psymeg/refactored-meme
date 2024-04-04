@@ -56,6 +56,7 @@ if(!require(tsbox)) install.packages("tsbox", repos = "http://cran.us.r-project.
 if(!require(forecast)) install.packages("forecast", repos = "http://cran.us.r-project.org")
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(measurements)) install.packages("measurements", repos = "http://cran.us.r-project.org")
+if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
 
 library(tidyverse)
 library(caret)
@@ -70,6 +71,7 @@ library(tsbox)
 library(forecast)
 library(data.table)
 library(measurements)
+library(kableExtra)
 
 ```
 
@@ -136,13 +138,23 @@ Seattle_Weather$TMAX <- as.numeric(Seattle_Weather$TMAX)
 Seattle_Weather$TMIN <- as.numeric(Seattle_Weather$TMIN)
 #hist(x = Seattle_Weather$TMIN, xlab = "Precipitation", ylab ='Frequency of readings', main = #paste("NOAA recordings per year"))
 
+#Extract Unique Station Names and Identifiers
+Seattle_Stations <- unique(Seattle_Weather[, c('NAME', 'STATION')])
+
+# Remove the index column - otherwise it gets printed even though we asked for only Station and Name
+rownames(Seattle_Stations) <- NULL
+
 ggplot(Seattle_Weather, aes(x=Seattle_Weather$DATE,y=Seattle_Weather$PRCP)) +
   geom_line() +
   xlab("Date") +
   ylab("Daily Rainfall (Millimeters)") 
 
 ```
-We have data from `r n_distinct(Weather$STATION)` stations: `r unique(Weather$NAME)`. Of `r length(Seattle_Weather$PRCP)` rainfall measurements, `r length(which(Seattle_Weather$PRCP!=0))` recorded rainfall, and `r length(which(Seattle_Weather$PRCP==0))` recorded no rainfall. The maximum rainfall during this period was `r max(Seattle_Weather$PRCP, na.rm =T)`mm which fell on `r Seattle_Weather[which.max(Seattle_Weather$PRCP), "DATE"]`. Heavy rainfall is defined by NIWA as rainfall of over 100mm in 24 hours and this occurred  `r length(which(Seattle_Weather$PRCP>=100))` times during the period we have data for.
+We have data from `r n_distinct(Weather$STATION)` stations: 
+
+`r kable(Seattle_Stations, format = "markdown")` 
+
+Of `r length(Seattle_Weather$PRCP)` rainfall measurements, `r length(which(Seattle_Weather$PRCP!=0))` recorded rainfall, and `r length(which(Seattle_Weather$PRCP==0))` recorded no rainfall. The maximum rainfall during this period was `r max(Seattle_Weather$PRCP, na.rm =T)`mm which fell on `r Seattle_Weather[which.max(Seattle_Weather$PRCP), "DATE"]`. Heavy rainfall is defined by NIWA as rainfall of over 100mm in 24 hours and this occurred  `r length(which(Seattle_Weather$PRCP>=100))` times during the period we have data for.
 
 ``` {r SeattleDivide}
 Seattle_Weather %>% group_by(Seattle_Weather$STATION)
