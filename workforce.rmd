@@ -135,8 +135,10 @@ Seattle_Weather$PRCP <- conv_unit(Seattle_Weather$PRCP, "inch", "mm")
 
 
 Seattle_Weather$TMAX <- as.numeric(Seattle_Weather$TMAX)
+Seattle_Weather$TMAX <- conv_unit(Seattle_Weather$TMAX, "F", "C")
+
 Seattle_Weather$TMIN <- as.numeric(Seattle_Weather$TMIN)
-#hist(x = Seattle_Weather$TMIN, xlab = "Precipitation", ylab ='Frequency of readings', main = #paste("NOAA recordings per year"))
+Seattle_Weather$TMIN <- conv_unit(Seattle_Weather$TMIN, "F", "C")
 
 #Extract Unique Station Names and Identifiers
 Seattle_Stations <- unique(Seattle_Weather[, c('NAME', 'STATION')])
@@ -149,12 +151,16 @@ ggplot(Seattle_Weather, aes(x=Seattle_Weather$DATE,y=Seattle_Weather$PRCP)) +
   xlab("Date") +
   ylab("Daily Rainfall (Millimeters)") 
 
+options(digits=2)
+
 ```
 We have data from `r n_distinct(Weather$STATION)` stations: 
 
 `r kable(Seattle_Stations, format = "markdown")` 
 
-Of `r length(Seattle_Weather$PRCP)` rainfall measurements, `r length(which(Seattle_Weather$PRCP!=0))` recorded rainfall, and `r length(which(Seattle_Weather$PRCP==0))` recorded no rainfall. The maximum rainfall during this period was `r max(Seattle_Weather$PRCP, na.rm =T)`mm which fell on `r Seattle_Weather[which.max(Seattle_Weather$PRCP), "DATE"]`. Heavy rainfall is defined by NIWA as rainfall of over 100mm in 24 hours and this occurred  `r length(which(Seattle_Weather$PRCP>=100))` times during the period we have data for.
+Of `r length(Seattle_Weather$PRCP)` rainfall measurements, `r length(which(Seattle_Weather$PRCP!=0))` recorded rainfall, and `r length(which(Seattle_Weather$PRCP==0))` recorded no rainfall. The maximum rainfall during this period was `r max(Seattle_Weather$PRCP, na.rm =T)`mm which fell on `r Seattle_Weather[which.max(Seattle_Weather$PRCP), "DATE"]`. Heavy rainfall is defined by NIWA as rainfall of over 100mm in 24 hours^[https://niwa.co.nz/natural-hazards/extreme-weather-heavy-rainfall] and this occurred  `r length(which(Seattle_Weather$PRCP>=100))` times during the period we have data for.
+
+Over the period we have data for we have a maximum temperature of `r max(Seattle_Weather$TMAX, na.rm=TRUE)` and a minimum of `r min(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius. The mean maximum temperature was `r mean(Seattle_Weather$TMAX, na.rm=TRUE)` while the mean minimum temperature was `r mean(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius.
 
 ``` {r SeattleDivide}
 Seattle_Weather %>% group_by(Seattle_Weather$STATION)
