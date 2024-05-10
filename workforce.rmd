@@ -57,7 +57,7 @@ if(!require(forecast)) install.packages("forecast", repos = "http://cran.us.r-pr
 if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.r-project.org")
 if(!require(measurements)) install.packages("measurements", repos = "http://cran.us.r-project.org")
 if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
-
+if(!require(ggmap)) install.packages("ggmap", repos = "http://cran.us.r-project.org")
 library(tidyverse)
 library(caret)
 library(dplyr)
@@ -72,6 +72,7 @@ library(forecast)
 library(data.table)
 library(measurements)
 library(kableExtra)
+library(ggmap)
 
 ```
 
@@ -146,7 +147,7 @@ Seattle_Stations <- unique(Seattle_Weather[, c('NAME', 'STATION')])
 # Remove the index column - otherwise it gets printed even though we asked for only Station and Name
 rownames(Seattle_Stations) <- NULL
 
-ggplot(Seattle_Weather, aes(x=Seattle_Weather$DATE,y=Seattle_Weather$PRCP)) +
+ggplot(Seattle_Weather, aes(x=DATE,y=PRCP)) +
   geom_line() +
   xlab("Date") +
   ylab("Daily Rainfall (Millimeters)") 
@@ -163,7 +164,7 @@ Of `r length(Seattle_Weather$PRCP)` rainfall measurements, `r length(which(Seatt
 Over the period we have data for we have a maximum temperature of `r max(Seattle_Weather$TMAX, na.rm=TRUE)` and a minimum of `r min(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius. The mean maximum temperature was `r mean(Seattle_Weather$TMAX, na.rm=TRUE)` while the mean minimum temperature was `r mean(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius.
 
 ``` {r SeattleDivide}
-Seattle_Weather %>% group_by(Seattle_Weather$STATION)
+#Seattle_Weather %>% group_by(Seattle_Weather$STATION)
 ```
 
 ``` {r dataSummary}
@@ -171,6 +172,12 @@ summary(Seattle_911)
 
 summary(Weather)
 ```
+
+To do -
+investigation of police data
+map weather station locations
+correlate weather station locations with police data
+
 
 ``` {r SplitStations}
 # Group Data by weather station
