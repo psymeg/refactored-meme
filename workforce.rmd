@@ -102,8 +102,10 @@ if(!file.exists(dl))
 
 ``` {r loadData, echo=TRUE, results="hide", message=FALSE, warning=TRUE}
 
-#Load Seattle 0911 Call data
-Seattle_911 <- read_csv("Seattle_Police_Department_911_Incident_Response.csv")
+#Load Seattle 0911 Call data; Remove spaces from Column Labels
+Seattle_911 <- read.csv("Seattle_Police_Department_911_Incident_Response.csv", check.names=TRUE)
+#Remove spaces from variable names
+Seattle_911
 #Load weather data
 Weather <- read.csv("3533326.csv", as.is=T)
 ```
@@ -168,9 +170,81 @@ Over the period we have data for we have a maximum temperature of `r max(Seattle
 ```
 
 ``` {r dataSummary}
+
+#convert dates to posix dates from character class. ChatGPT used [OpenAI. ChatGPT (GPT-4). 2024. OpenAI, https://www.openai.com/chatgpt.]
+Seattle_911 <- Seattle_911 %>%
+   mutate(`Event Clearance Date` = as.POSIXct(`Event Clearance Date`, format = "%m/%d/%Y %I:%M:%S %p", tz = "America/Los_Angeles"))
+#Stop R converting Offense Number etc into Scientific Notation
+options(scipen = 999)
 summary(Seattle_911)
 
-summary(Weather)
+(unique(Seattle_911$`Event Clearance Description`))
+```
+
+The Seattle 911 dataset contains data from `r min(Seattle_911$"Event Clearance Date", na.rm = TRUE)` through to `r max(Seattle_911$"Event Clearance Date", na.rm = TRUE)`.  During this period, `r length(Seattle_911$"CAD Event Number")` CAD events were recorded.
+
+
+``` {r graphEventClearaceDescription}
+
+# Aggregate the data to get counts for each 'Event Clearance Desc'
+event_counts <- Seattle_911 %>%
+  count(`Event Clearance Description`, name = "count") %>%
+  arrange(desc(count))
+event_counts <- event_counts %>%
+  mutate(GroupedDescription = case_when(
+    grepl("^ALACAD", `Event Clearance Description`) ~ "ALACAD",
+    grepl("^TRAFFIC", `Event Clearance Description`, ignore.case = TRUE) ~ "Traffic",
+    grepl("^HARBOR", `Event Clearance Description`, ignore.case = TRUE) ~ "Harbor",
+    grepl("^THEFT", `Event Clearance Description`, ignore.case = TRUE) ~ "Theft",
+    grepl("^ALARMS", `Event Clearance Description`, ignore.case = TRUE) ~ "Alarms",
+    grepl("^BURGLARY", `Event Clearance Description`, ignore.case = TRUE) ~ "Burglary",
+    TRUE ~ `Event Clearance Description`
+  ))
+
+event_counts_summary <- event_counts %>%
+  group_by(GroupedDescription) %>%
+  summarise(TotalCount = sum(count))
+
+ggplot(event_counts_summary, aes(x = GroupedDescription, y = TotalCount, group = 1)) +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8)) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+
+# Create the bar plot
+event_counts <- data_frame(event_counts)
+ggplot(aes(event_counts$`Event Clearance Description`)) +
+   geom_line()
+
+ggplot(event_counts, aes(x = `Event Clearance Description`)) +
+  geom_bar() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1))
+# Optionally, abbreviate the descriptions
+event_counts$ShortDescription <- abbreviate(event_counts$`Event Clearance Description`, minlength = 10)
+
+# Plotting
+ggplot(event_counts, aes(x = ShortDescription, y = count, group = 1)) +
+  geom_line() +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6)) +
+  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+
+# Count occurrences of each description
+top_descriptions <- event_counts %>%
+  count(`Event Clearance Description`, name = "Count") %>%
+  arrange(desc(Count)) %>%
+  slice_head(n = 10)
+
+# Print the top 10 descriptions
+print(top_descriptions)
+
+# Plotting if necessary
+ggplot(top_descriptions, aes(x = reorder(`Event Clearance Description`, -Count), y = Count)) +
+  geom_bar(stat = "identity") +
+  coord_flip() +  # Flip coordinates for better readability
+  theme_minimal() +
+  labs(title = "Top 10 Most Common Event Clearance Descriptions",
+       x = "Event Clearance Description",
+       y = "Count")
+
 ```
 
 To do -
