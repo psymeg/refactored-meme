@@ -58,6 +58,7 @@ if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.
 if(!require(measurements)) install.packages("measurements", repos = "http://cran.us.r-project.org")
 if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
 if(!require(ggmap)) install.packages("ggmap", repos = "http://cran.us.r-project.org")
+
 library(tidyverse)
 library(caret)
 library(dplyr)
@@ -108,6 +109,8 @@ Seattle_911 <- read.csv("Seattle_Police_Department_911_Incident_Response.csv", c
 Seattle_911
 #Load weather data
 Weather <- read.csv("3533326.csv", as.is=T)
+
+
 ```
 
 ##Data Investigation
@@ -156,6 +159,40 @@ ggplot(Seattle_Weather, aes(x=DATE,y=PRCP)) +
 
 options(digits=2)
 
+# https://console.cloud.google.com/google/maps-apis/credentials key. Set in .rProfile 
+register_google(key = APIKEY)
+
+# Create the dataframe
+locations <- data.frame(
+  Location = c("BREMERTON, WA US", "EVERETT, WA US", "MONROE, WA US", 
+               "TOLT SOUTH FORK RESERVOIR, WA US", "RENTON MUNICIPAL AIRPORT, WA US", 
+               "KENT, WA US", "TACOMA NUMBER 1, WA US", "LANDSBURG, WA US", 
+               "CEDAR LAKE, WA US", "SNOQUALMIE FALLS, WA US", "WAUNA 3 W, WA US", 
+               "PALMER 3 ESE, WA US"),
+  ID = c("USC00450872", "USC00452675", "USC00455525", "USC00458508", 
+         "USW00094248", "USC00454169", "USC00458278", "USC00454486", 
+         "USC00451233", "USC00457773", "USC00459021", "USC00456295")
+)
+
+# Geocode the locations to add latitude and longitude
+geocoded_data <- locations %>%
+  mutate_geocode(Location, output = "latlona", source = "google")
+
+# View the result
+print(geocoded_data)
+dl <- "geocoded_stations.csv"
+if(file.exists(dl)){
+  geocoded_data <- read.csv("geocoded_stations.csv", as.is=T)
+} else{
+  options(digits=10)
+  #call google maps api to get lat and longitude of stations; returned lat and long is accurate to 2 decimal places - within 1.1 kms.
+  geocoded_data <- Seattle_Stations %>%
+    mutate_geocode(NAME, output = "latlona", source = "google")
+  #write locations to file - latitude and longitude shouldn't change. 
+  write_csv(geocoded_data, file = "geocoded_stations.csv")
+}
+
+
 ```
 We have data from `r n_distinct(Weather$STATION)` stations: 
 
@@ -173,77 +210,105 @@ Over the period we have data for we have a maximum temperature of `r max(Seattle
 
 #convert dates to posix dates from character class. ChatGPT used [OpenAI. ChatGPT (GPT-4). 2024. OpenAI, https://www.openai.com/chatgpt.]
 Seattle_911 <- Seattle_911 %>%
-   mutate(`Event Clearance Date` = as.POSIXct(`Event Clearance Date`, format = "%m/%d/%Y %I:%M:%S %p", tz = "America/Los_Angeles"))
+   mutate(`Event.Clearance.Date` = as.POSIXct(`Event.Clearance.Date`, format = "%m/%d/%Y %I:%M:%S %p", tz = "America/Los_Angeles"))
 #Stop R converting Offense Number etc into Scientific Notation
 options(scipen = 999)
 summary(Seattle_911)
 
-(unique(Seattle_911$`Event Clearance Description`))
+(unique(Seattle_911$`Event.Clearance.Description`))
 ```
 
-The Seattle 911 dataset contains data from `r min(Seattle_911$"Event Clearance Date", na.rm = TRUE)` through to `r max(Seattle_911$"Event Clearance Date", na.rm = TRUE)`.  During this period, `r length(Seattle_911$"CAD Event Number")` CAD events were recorded.
+The Seattle 911 dataset contains data from `r min(Seattle_911$"Event.Clearance.Date", na.rm = TRUE)` through to `r max(Seattle_911$"Event.Clearance.Date", na.rm = TRUE)`.  During this period, `r length(Seattle_911$"CAD.Event.Number")` CAD events were recorded.
 
 
 ``` {r graphEventClearaceDescription}
 
 # Aggregate the data to get counts for each 'Event Clearance Desc'
 event_counts <- Seattle_911 %>%
-  count(`Event Clearance Description`, name = "count") %>%
+  count(`Event.Clearance.Description`, name = "count") %>%
   arrange(desc(count))
+
+# Convert the count column to numeric if it isn't already
+event_counts$count <- as.numeric(event_counts$count)
+
+#Group Categories to provide simplified view (120 categories, some duplicated)
 event_counts <- event_counts %>%
   mutate(GroupedDescription = case_when(
-    grepl("^ALACAD", `Event Clearance Description`) ~ "ALACAD",
-    grepl("^TRAFFIC", `Event Clearance Description`, ignore.case = TRUE) ~ "Traffic",
-    grepl("^HARBOR", `Event Clearance Description`, ignore.case = TRUE) ~ "Harbor",
-    grepl("^THEFT", `Event Clearance Description`, ignore.case = TRUE) ~ "Theft",
-    grepl("^ALARMS", `Event Clearance Description`, ignore.case = TRUE) ~ "Alarms",
-    grepl("^BURGLARY", `Event Clearance Description`, ignore.case = TRUE) ~ "Burglary",
-    TRUE ~ `Event Clearance Description`
-  ))
-
-event_counts_summary <- event_counts %>%
+    grepl("^ALACAD", `Event.Clearance.Description`, ignore.case = TRUE) ~ "ALACAD",
+    grepl("^ALARMS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Alarms",
+    grepl("^ANIMALS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Animals",
+    grepl("^ASSAULTS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Assaults",
+    grepl("^AUTO", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Auto",
+    grepl("^AWOL", `Event.Clearance.Description`, ignore.case = TRUE) ~ "awol",
+    grepl("^BURGLARY", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Burglary",
+    grepl("^CASUALTY", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Casualty",
+    grepl("^CRISIS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Crisis",
+    grepl("^DISTURBANCE", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Disturbance",
+    grepl("^DOMESTIC", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Domestic",
+    grepl("^TRAFFIC", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Traffic",
+    grepl("^HARASSMENT", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Harassment",
+    grepl("^HARBOR", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Harbor",
+    grepl("^LIQUOR", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Liquor",
+    grepl("^MENTAL", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Mental",
+    grepl("^NARCOTICS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Narcotics",
+    grepl("^PARKS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Parks",
+    grepl("^PERSON", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Person",
+    grepl("^PROPERTY", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Property",
+    grepl("^STRONG", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Strong Arm",
+    grepl("^SUSPICIOUS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Suspicious",  
+    grepl("^THEFT", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Theft",
+    grepl("^TRESPASS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Trespass",
+    TRUE ~ `Event.Clearance.Description`
+  )) %>%
+  # Filter out rows with NA or empty GroupedDescription
+  filter(!is.na(GroupedDescription) & GroupedDescription != "") %>%
+  # Group by GroupedDescription and Summarise
   group_by(GroupedDescription) %>%
-  summarise(TotalCount = sum(count))
+  summarise(total_count = sum(count , na.rm = TRUE))  
 
-ggplot(event_counts_summary, aes(x = GroupedDescription, y = TotalCount, group = 1)) +
-  geom_line() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 8)) +
-  scale_x_discrete(guide = guide_axis(n.dodge = 2))
 
-# Create the bar plot
-event_counts <- data_frame(event_counts)
-ggplot(aes(event_counts$`Event Clearance Description`)) +
-   geom_line()
+# View the result
+print(event_counts)
 
-ggplot(event_counts, aes(x = `Event Clearance Description`)) +
-  geom_bar() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1))
-# Optionally, abbreviate the descriptions
-event_counts$ShortDescription <- abbreviate(event_counts$`Event Clearance Description`, minlength = 10)
+#event_count_graph <- ggplot(event_counts,aes(GroupedDescription)) +
+ # geom_bar(stat = identity, fill = "orange") +
+#  coord_flip() 
+#Sevent_count_graph  
 
-# Plotting
-ggplot(event_counts, aes(x = ShortDescription, y = count, group = 1)) +
-  geom_line() +
-  theme(axis.text.x = element_text(angle = 90, hjust = 1, size = 6)) +
-  scale_x_discrete(guide = guide_axis(n.dodge = 2))
+event_count_graph <- ggplot(event_counts, aes(x = GroupedDescription, y = total_count)) +
+  geom_col(fill = "orange") +
+  coord_flip() +
+  labs(title = "Event Count by Grouped Description",
+       x = "Grouped Description",
+       y = "Total Count") +
+  theme(axis.text.y = element_text(size = 8), # Reduce text size
+        axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis labels
+
+# Print the graph
+print(event_count_graph)
+
+#event_counts_summary <- event_counts %>%
+#  group_by(GroupedDescription) %>%
+#  summarise(TotalCount = sum(count))
+
 
 # Count occurrences of each description
-top_descriptions <- event_counts %>%
-  count(`Event Clearance Description`, name = "Count") %>%
-  arrange(desc(Count)) %>%
-  slice_head(n = 10)
+#top_descriptions <- event_counts %>%
+#  count(`Event.Clearance.Description`, name = "Count") %>%
+#  arrange(desc(Count)) %>%
+#  slice_head(n = 10)
 
 # Print the top 10 descriptions
-print(top_descriptions)
+#print(top_descriptions)
 
 # Plotting if necessary
-ggplot(top_descriptions, aes(x = reorder(`Event Clearance Description`, -Count), y = Count)) +
-  geom_bar(stat = "identity") +
-  coord_flip() +  # Flip coordinates for better readability
-  theme_minimal() +
-  labs(title = "Top 10 Most Common Event Clearance Descriptions",
-       x = "Event Clearance Description",
-       y = "Count")
+#ggplot(top_descriptions, aes(x = reorder(`Event.Clearance.Description`, -Count), y = Count)) +
+#  geom_bar(stat = "identity") +
+#  coord_flip() +  # Flip coordinates for better readability
+#  theme_minimal() +
+#  labs(title = "Top 10 Most Common Event Clearance Descriptions",
+#       x = "Event Clearance Description",
+#       y = "Count")
 
 ```
 
