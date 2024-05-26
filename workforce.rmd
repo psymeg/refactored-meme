@@ -10,7 +10,7 @@ toc: true
   
 ## Introduction
 
-For the 9th Course in the HarvardX Data Science course we have been asked to create two recommendation systems. The first was a Movie Recommendation System using the MovieLens dataset. The second is a "Choose your Own Project." For this a we are targetting a Workforce Recommendation System - mixing weather forecasts with Police 911 call information to see if it is possible to predict Police staffing requirements based on weather based trends.
+For the 9th Course in the HarvardX Data Science course we have been asked to create two recommendation systems. The first was a Movie Recommendation System using the MovieLens dataset. The second is a "Choose your Own Project." For this a we have chosen a Workforce Recommendation System - mixing weather forecasts with Police 911 call information to see if it is possible to predict Police staffing requirements based on weather based trends.
 
 We are using the Seattle Police Department 911 Incident Response data set found here : https://www.kaggle.com/datasets/sohier/seattle-police-department-911-incident-response
 
@@ -29,7 +29,7 @@ The first step is to clear any set variables so we do not introduce anything une
 
 Then we install the packages required to manipulate the data.
 
-```{r packageInstall, echo=TRUE, results="hide", message=FALSE}
+```{r packageInstall, echo=FALSE, results="hide", message=FALSE}
 ####################################################
 # This code is divided into the following sections #
 # 1. Install required packages                     #
@@ -81,7 +81,7 @@ Following that, the data is downloaded and then divided into 2 sets. The first s
 
 The creation of the 2 sets involves the following steps. Initially required packages are installed if not installed and then loaded. Next the data is downloaded if the zip files are not found. Column names are set and the data is converted into forms more easily processed. Then the data is joined. Finally the joined data is split into 2 sets - the edx set used to train the algorithm and the final_holdout_test set that will be used to validate the algorithm and calculate the final RMSE score.
 
-```{r dataDownload, echo=TRUE, results="hide", message=FALSE, warning=FALSE}
+```{r dataDownload, echo=FALSE, results="hide", message=FALSE, warning=FALSE}
 
 #Seattle Police Department 911 Incident Response
 #https://www.kaggle.com/datasets/sohier/seattle-police-department-911-incident-response/download?datasetVersionNumber=1
@@ -101,44 +101,54 @@ if(!file.exists(dl))
 
 ```
 
-``` {r loadData, echo=TRUE, results="hide", message=FALSE, warning=TRUE}
+``` {r loadData, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
 
 #Load Seattle 0911 Call data; Remove spaces from Column Labels
 Seattle_911 <- read.csv("Seattle_Police_Department_911_Incident_Response.csv", check.names=TRUE)
-#Remove spaces from variable names
-Seattle_911
+
 #Load weather data
 Weather <- read.csv("3533326.csv", as.is=T)
 
-
 ```
 
-##Data Investigation
 
-``` {r dataInvWeather}
-head(Weather)
 
-names(Weather)
+``` {r dataInvWeather, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
+#head(Weather)
 
-min(range(Weather$DATE))
+#names(Weather)
 
-max(range(Weather$DATE))
+#min(range(Weather$DATE))
+
+#max(range(Weather$DATE))
 ```
-Our data range starts from `r min(range(Weather$DATE))` and ends `r max(range(Weather$DATE))`. 
-``` {r Seattle_Weather}
-#Seattle_Weather <- xts(Weather["Weather$STATION" == 'USC00450872',c("TMAX","TMIN","PRCP")], order.by=as.Date(Weather$DATE))
-Seattle_Weather <- xts(Weather[,c("NAME","STATION","DATE","TMAX","TMIN","PRCP")], order.by=as.Date(Weather$DATE))
+\newpage
 
+## Data Investigation
+
+### Weather Dataset
+
+Looking at the first 5 rows of data we can see the following: `r knitr::kable(head(Weather), format="latex", booktabs=TRUE) %>% 
+  kable_styling(latex_options="scale_down") %>%
+  kable_styling(latex_options="HOLD_position")`
+
+The weather data starts from `r min(range(Weather$DATE))` and ends `r max(range(Weather$DATE))`. It has the following column headers: `r colnames(Weather)`. If we look at a single row, row 100 in this case, we can see the following: `r Weather[100,]`
+
+For our investigation the following columns may be of interest - STATION, NAME, DATE, PRCP, SNOW, TMAX  TMIN. The PRCP (Precipitation) and SNOW (Snowfall) columns are in inches and the TMAX (Maximum Temperature) TMIN (Minimum Temperature) are in Fahrenheit. These will be converted to their metric equivalents using the measurements package. We are interested in determining if there is any relationship between crime reports and weather so we will determine the closest weather station using latitude and longitude bearings returned by the ggmap package.
+
+``` {r Seattle_Weather, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
+#Extract the Weather Data we are interested in
+Seattle_Weather <- xts(Weather[,c("NAME","STATION","DATE","TMAX","TMIN","PRCP", "SNOW")], order.by=as.Date(Weather$DATE))
+#Convert to DataFrame
 Seattle_Weather <- as.data.frame(Seattle_Weather)
-#Seattle_Weather = window(Seattle_Weather, start=as.Date("2000-01-01"), end=as.Date("2002-12-31"))
-
-class(Seattle_Weather)
+#Convert Date to DATE class and PRCP and SNOW
 Seattle_Weather$DATE <- as.Date(Seattle_Weather$DATE)
 Seattle_Weather$PRCP <- as.numeric(Seattle_Weather$PRCP)
+Seattle_Weather$SNOW <- as.numeric(Seattle_Weather$SNOW)
 
-#Convert Precipitation from Imperial to Metric
+#Convert Precipitation and Snowfall from Imperial to Metric
 Seattle_Weather$PRCP <- conv_unit(Seattle_Weather$PRCP, "inch", "mm")
-
+Seattle_Weather$SNOW <- conv_unit(Seattle_Weather$SNOW, "inch", "mm")
 
 Seattle_Weather$TMAX <- as.numeric(Seattle_Weather$TMAX)
 Seattle_Weather$TMAX <- conv_unit(Seattle_Weather$TMAX, "F", "C")
@@ -150,36 +160,19 @@ Seattle_Weather$TMIN <- conv_unit(Seattle_Weather$TMIN, "F", "C")
 Seattle_Stations <- unique(Seattle_Weather[, c('NAME', 'STATION')])
 
 # Remove the index column - otherwise it gets printed even though we asked for only Station and Name
-rownames(Seattle_Stations) <- NULL
+#rownames(Seattle_Stations) <- NULL
 
-ggplot(Seattle_Weather, aes(x=DATE,y=PRCP)) +
-  geom_line() +
-  xlab("Date") +
-  ylab("Daily Rainfall (Millimeters)") 
+#ggplot(Seattle_Weather, aes(x=DATE,y=PRCP)) +
+#  geom_line() +
+#  xlab("Date") +
+#  ylab("Daily Rainfall (Millimeters)") 
 
-options(digits=2)
+#options(digits=2)
 
+# Add Latitude and Longitude coordinates for Weather Stations. It would be more accurate to do this manually, and if for example we were going actually use this report we would do that, however for the benefit of learning and study using the Google Maps API was preferred.
 # https://console.cloud.google.com/google/maps-apis/credentials key. Set in .rProfile 
 register_google(key = APIKEY)
 
-# Create the dataframe
-locations <- data.frame(
-  Location = c("BREMERTON, WA US", "EVERETT, WA US", "MONROE, WA US", 
-               "TOLT SOUTH FORK RESERVOIR, WA US", "RENTON MUNICIPAL AIRPORT, WA US", 
-               "KENT, WA US", "TACOMA NUMBER 1, WA US", "LANDSBURG, WA US", 
-               "CEDAR LAKE, WA US", "SNOQUALMIE FALLS, WA US", "WAUNA 3 W, WA US", 
-               "PALMER 3 ESE, WA US"),
-  ID = c("USC00450872", "USC00452675", "USC00455525", "USC00458508", 
-         "USW00094248", "USC00454169", "USC00458278", "USC00454486", 
-         "USC00451233", "USC00457773", "USC00459021", "USC00456295")
-)
-
-# Geocode the locations to add latitude and longitude
-geocoded_data <- locations %>%
-  mutate_geocode(Location, output = "latlona", source = "google")
-
-# View the result
-print(geocoded_data)
 dl <- "geocoded_stations.csv"
 if(file.exists(dl)){
   geocoded_data <- read.csv("geocoded_stations.csv", as.is=T)
@@ -192,17 +185,32 @@ if(file.exists(dl)){
   write_csv(geocoded_data, file = "geocoded_stations.csv")
 }
 
+#Merge the Latitude and Longitude entries back into the Seattle_Weather dataframe.
+# Seattle_Weather <- Seattle_Weather %>% didnt work so lets create temporary dataframe
+Seattle_Weather_with_coords <- Seattle_Weather %>%
+  left_join(geocoded_data %>% select(STATION, lat, lon), by = "STATION")
+#rename it back
+Seattle_Weather <- Seattle_Weather_with_coords
+
+options(digits=2)
 
 ```
+
 We have data from `r n_distinct(Weather$STATION)` stations: 
 
-`r kable(Seattle_Stations, format = "markdown")` 
+`r kable(Seattle_Stations, format = "markdown", booktabs=TRUE)` 
 
-Of `r length(Seattle_Weather$PRCP)` rainfall measurements, `r length(which(Seattle_Weather$PRCP!=0))` recorded rainfall, and `r length(which(Seattle_Weather$PRCP==0))` recorded no rainfall. The maximum rainfall during this period was `r max(Seattle_Weather$PRCP, na.rm =T)`mm which fell on `r Seattle_Weather[which.max(Seattle_Weather$PRCP), "DATE"]`. Heavy rainfall is defined by NIWA as rainfall of over 100mm in 24 hours^[https://niwa.co.nz/natural-hazards/extreme-weather-heavy-rainfall] and this occurred  `r length(which(Seattle_Weather$PRCP>=100))` times during the period we have data for.
+Of `r length(Seattle_Weather$PRCP)` rainfall measurements, `r length(which(Seattle_Weather$PRCP!=0))` recorded rainfall, and `r length(which(Seattle_Weather$PRCP==0))` recorded no rainfall. The maximum rainfall during this period was `r max(Seattle_Weather$PRCP, na.rm =T)`mm which fell on `r Seattle_Weather[which.max(Seattle_Weather$PRCP), "DATE"]` at `r Seattle_Weather[which.max(Seattle_Weather$PRCP), "NAME"]`. Heavy rainfall is defined by NIWA as rainfall of over 100mm in 24 hours^[https://niwa.co.nz/natural-hazards/extreme-weather-heavy-rainfall] and this occurred  `r length(which(Seattle_Weather$PRCP>=100))` times during the period we have data for.
 
-Over the period we have data for we have a maximum temperature of `r max(Seattle_Weather$TMAX, na.rm=TRUE)` and a minimum of `r min(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius. The mean maximum temperature was `r mean(Seattle_Weather$TMAX, na.rm=TRUE)` while the mean minimum temperature was `r mean(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius.
+Of `r length(Seattle_Weather$SNOW)` snowfall entries, `r length(which(Seattle_Weather$SNOW!=0))` recorded snowfall, and `r length(which(Seattle_Weather$SNOW==0))` recorded no snowfall, with `r sum(is.na(Seattle_Weather$SNOW))` not recording data. The maximum snowfall during this period was `r max(Seattle_Weather$SNOW, na.rm =T)`mm which fell on `r Seattle_Weather[which.max(Seattle_Weather$SNOW), "DATE"]` at `r Seattle_Weather[which.max(Seattle_Weather$SNOW), "NAME"]`.
+
+Over the period we have data for we have a maximum temperature of `r max(Seattle_Weather$TMAX, na.rm=TRUE)` at `r Seattle_Weather[which.max(Seattle_Weather$TMAX), "NAME"]` and a minimum of `r min(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius at `r Seattle_Weather[which.max(Seattle_Weather$TMAX), "NAME"]`. The mean maximum temperature was `r mean(Seattle_Weather$TMAX, na.rm=TRUE)` while the mean minimum temperature was `r mean(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius.
 
 ``` {r SeattleDivide}
+
+#We have data from `r n_distinct(Weather$STATION)` stations: 
+
+#r kable(Seattle_Stations, format = "markdown")` 
 #Seattle_Weather %>% group_by(Seattle_Weather$STATION)
 ```
 
