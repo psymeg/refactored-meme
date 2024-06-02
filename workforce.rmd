@@ -27,8 +27,6 @@ The first step is to clear any set variables so we do not introduce anything une
 #rm(list = ls ())
 ```
 
-Then we install the packages required to manipulate the data.
-
 ```{r packageInstall, echo=FALSE, results="hide", message=FALSE}
 ####################################################
 # This code is divided into the following sections #
@@ -46,6 +44,7 @@ Then we install the packages required to manipulate the data.
 if(!require(tidyverse)) install.packages("tidyverse", repos = "https://cran.us.r-project.org")
 if(!require(caret)) install.packages("caret", repos = "https://cran.us.r-project.org")
 if(!require(dplyr)) install.packages("dplyr", repos = "https://cran.us.r-project.org") 
+if(!require(tidyr)) install.packages("tidyr", repos = "https://cran.us.r-project.org") 
 if(!require(kableExtra)) install.packages("kableExtra", repos = "https://cran.us.r-project.org")
 if(!require(lubridate)) install.packages("lubridate", repos = "https://cran.us.r-project.org")
 if(!require(scales)) install.packages("scales", repos = "https://cran.us.r-project.org")
@@ -58,11 +57,12 @@ if(!require(data.table)) install.packages("data.table", repos = "http://cran.us.
 if(!require(measurements)) install.packages("measurements", repos = "http://cran.us.r-project.org")
 if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
 if(!require(ggmap)) install.packages("ggmap", repos = "http://cran.us.r-project.org")
+#if(!require(wrapr)) install.packages("wrapr", repos = "http://cran.us.r-project.org")
 
 library(tidyverse)
 library(caret)
 library(dplyr)
-library(kableExtra)
+library(tidyr)
 library(lubridate)
 library(scales)
 library(stringr)
@@ -71,15 +71,16 @@ library(xts)
 library(tsbox)
 library(forecast)
 library(data.table)
-library(measurements)
-library(kableExtra)
-library(ggmap)
+library(measurements) 
+library(kableExtra) #table functions
+library(ggmap) #mapping functions
+#library(wrapr) #orderv dataframes 
 
 ```
 
-Following that, the data is downloaded and then divided into 2 sets. The first set is used to train the algorithm and the second set is used to validate the algorithm. By dividing the data the problem of over-training and thus producing skewed results can be avoided.
+At a high level, the data is downloaded, analysed, the data merged and the merged divided into 2 sets. The first set is used to train the algorithm and the second set is used to validate the algorithm. By dividing the data the problem of over-training and thus producing skewed results can be avoided.
 
-The creation of the 2 sets involves the following steps. Initially required packages are installed if not installed and then loaded. Next the data is downloaded if the zip files are not found. Column names are set and the data is converted into forms more easily processed. Then the data is joined. Finally the joined data is split into 2 sets - the edx set used to train the algorithm and the final_holdout_test set that will be used to validate the algorithm and calculate the final RMSE score.
+The creation of the 2 sets involves the following steps. Initially required packages are installed if not installed and then loaded. Next the data is downloaded if the zip files are not found. Column names are modified (for example spaces are removed to make the data easier to work with) and the data is converted into forms more easily processed. Then the data is joined. Finally the joined data is split into 2 sets - the edx set used to train the algorithm and the final_holdout_test set that will be used to validate the algorithm and calculate the final RMSE score.
 
 ```{r dataDownload, echo=FALSE, results="hide", message=FALSE, warning=FALSE}
 
@@ -91,26 +92,28 @@ The creation of the 2 sets involves the following steps. Initially required pack
 
 options(timeout = 120)
 
-dl <- "archive.zip"
-if(!file.exists(dl))
+#Police 911 Data
+dl <- "Seattle_Police_Department_911_Incident_Response.csv"
+if(file.exists(dl)){
+  #Load Seattle 0911 Call data; Remove spaces from Column Labels
+  Seattle_911 <- read.csv("Seattle_Police_Department_911_Incident_Response.csv", check.names=TRUE)
+} else {
+  #this wont work as it looks like kaggle now require an auth token
+  #if you do download you will need to unzip the archive file produced
   download.file("https://www.kaggle.com/datasets/sohier/seattle-police-department-911-incident-response/download?datasetVersionNumber=1", dl)
+}
+
+#Weather Data  
 
 dl <- "3533326.csv"
-if(!file.exists(dl))
+if(file.exists(dl)){
+  #Load weather data
+  Weather <- read.csv("3533326.csv", as.is=T)
+} else {  
   download.file("https://www.ncei.noaa.gov/orders/cdo/3533326.csv", dl)
+}
 
 ```
-
-``` {r loadData, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
-
-#Load Seattle 0911 Call data; Remove spaces from Column Labels
-Seattle_911 <- read.csv("Seattle_Police_Department_911_Incident_Response.csv", check.names=TRUE)
-
-#Load weather data
-Weather <- read.csv("3533326.csv", as.is=T)
-
-```
-
 
 
 ``` {r dataInvWeather, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
@@ -214,22 +217,31 @@ Over the period we have data for we have a maximum temperature of `r max(Seattle
 #Seattle_Weather %>% group_by(Seattle_Weather$STATION)
 ```
 
-``` {r dataSummary}
+``` {r dataSummary, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
 
 #convert dates to posix dates from character class. ChatGPT used [OpenAI. ChatGPT (GPT-4). 2024. OpenAI, https://www.openai.com/chatgpt.]
 Seattle_911 <- Seattle_911 %>%
    mutate(`Event.Clearance.Date` = as.POSIXct(`Event.Clearance.Date`, format = "%m/%d/%Y %I:%M:%S %p", tz = "America/Los_Angeles"))
 #Stop R converting Offense Number etc into Scientific Notation
 options(scipen = 999)
-summary(Seattle_911)
+#summary(Seattle_911)
 
-(unique(Seattle_911$`Event.Clearance.Description`))
+#Split Incident Location into Latitude_911 and Longitude_911
+Seattle_911 <- Seattle_911 %>%
+  mutate(Incident.Location = gsub("[()]", "", Incident.Location)) %>%
+  separate(Incident.Location, into = c("Latitude_911", "Longitude_911"), sep = ", ") 
+
+#Convert Latitude_911/Longitude_911 entries to numeric
+Seattle_911$Longitude_911 <- as.numeric(Seattle_911$Longitude_911)
+Seattle_911$Latitude_911 <- as.numeric(Seattle_911$Latitude_911)
+
+#(unique(Seattle_911$`Event.Clearance.Description`))
 ```
 
 The Seattle 911 dataset contains data from `r min(Seattle_911$"Event.Clearance.Date", na.rm = TRUE)` through to `r max(Seattle_911$"Event.Clearance.Date", na.rm = TRUE)`.  During this period, `r length(Seattle_911$"CAD.Event.Number")` CAD events were recorded.
 
 
-``` {r graphEventClearaceDescription}
+``` {r graphEventClearaceDescription, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
 
 # Aggregate the data to get counts for each 'Event Clearance Desc'
 event_counts <- Seattle_911 %>%
@@ -240,7 +252,7 @@ event_counts <- Seattle_911 %>%
 event_counts$count <- as.numeric(event_counts$count)
 
 #Group Categories to provide simplified view (120 categories, some duplicated)
-event_counts <- event_counts %>%
+group_event_counts <- event_counts %>%
   mutate(GroupedDescription = case_when(
     grepl("^ALACAD", `Event.Clearance.Description`, ignore.case = TRUE) ~ "ALACAD",
     grepl("^ALARMS", `Event.Clearance.Description`, ignore.case = TRUE) ~ "Alarms",
@@ -274,7 +286,7 @@ event_counts <- event_counts %>%
   group_by(GroupedDescription) %>%
   summarise(total_count = sum(count , na.rm = TRUE))  
 
-
+event_counts_30 <- group_event_counts[1:30,]
 # View the result
 print(event_counts)
 
@@ -283,7 +295,7 @@ print(event_counts)
 #  coord_flip() 
 #Sevent_count_graph  
 
-event_count_graph <- ggplot(event_counts, aes(x = GroupedDescription, y = total_count)) +
+event_count_graph <- ggplot(event_counts_30, aes(x = GroupedDescription, y = total_count)) +
   geom_col(fill = "orange") +
   coord_flip() +
   labs(title = "Event Count by Grouped Description",
@@ -326,7 +338,7 @@ map weather station locations
 correlate weather station locations with police data
 
 
-``` {r SplitStations}
+``` {r SplitStations, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
 # Group Data by weather station
 weather_data_grouped <- Seattle_Weather %>%
   group_by(STATION)
