@@ -24,7 +24,7 @@ The first step is to clear any set variables so we do not introduce anything une
 
 ```{r clear, echo=FALSE}
 #clear R variables
-#rm(list = ls ())
+rm(list = ls ())
 ```
 
 ```{r packageInstall, echo=FALSE, results="hide", message=FALSE}
@@ -58,6 +58,7 @@ if(!require(measurements)) install.packages("measurements", repos = "http://cran
 if(!require(kableExtra)) install.packages("kableExtra", repos = "http://cran.us.r-project.org")
 if(!require(ggmap)) install.packages("ggmap", repos = "http://cran.us.r-project.org")
 #if(!require(wrapr)) install.packages("wrapr", repos = "http://cran.us.r-project.org")
+#if(!require(forcats)) install.packages("forcats", repos = "http://cran.us.r-project.org")
 
 library(tidyverse)
 library(caret)
@@ -75,6 +76,7 @@ library(measurements)
 library(kableExtra) #table functions
 library(ggmap) #mapping functions
 #library(wrapr) #orderv dataframes 
+#library(forcats) #order graphs ## who needs graphs
 
 ```
 
@@ -129,7 +131,7 @@ if(file.exists(dl)){
 
 ## Data Investigation
 
-### Weather Dataset
+### Weather Dataset Investigation
 
 Looking at the first 5 rows of data we can see the following: `r knitr::kable(head(Weather), format="latex", booktabs=TRUE) %>% 
   kable_styling(latex_options="scale_down") %>%
@@ -209,36 +211,42 @@ Of `r length(Seattle_Weather$SNOW)` snowfall entries, `r length(which(Seattle_We
 
 Over the period we have data for we have a maximum temperature of `r max(Seattle_Weather$TMAX, na.rm=TRUE)` at `r Seattle_Weather[which.max(Seattle_Weather$TMAX), "NAME"]` and a minimum of `r min(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius at `r Seattle_Weather[which.max(Seattle_Weather$TMAX), "NAME"]`. The mean maximum temperature was `r mean(Seattle_Weather$TMAX, na.rm=TRUE)` while the mean minimum temperature was `r mean(Seattle_Weather$TMIN, na.rm=TRUE)` degrees Celsius.
 
-``` {r SeattleDivide}
 
-#We have data from `r n_distinct(Weather$STATION)` stations: 
-
-#r kable(Seattle_Stations, format = "markdown")` 
-#Seattle_Weather %>% group_by(Seattle_Weather$STATION)
-```
-
-``` {r dataSummary, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
+``` {r 911dataSummary, echo=FALSE, results="hide", message=FALSE, warning=FALSE}
 
 #convert dates to posix dates from character class. ChatGPT used [OpenAI. ChatGPT (GPT-4). 2024. OpenAI, https://www.openai.com/chatgpt.]
 Seattle_911 <- Seattle_911 %>%
-   mutate(`Event.Clearance.Date` = as.POSIXct(`Event.Clearance.Date`, format = "%m/%d/%Y %I:%M:%S %p", tz = "America/Los_Angeles"))
+   mutate(Event.Clearance.Date = as.POSIXct(Event.Clearance.Date, format = "%m/%d/%Y %I:%M:%S %p", tz ="America/Los_Angeles"))
 #Stop R converting Offense Number etc into Scientific Notation
 options(scipen = 999)
 #summary(Seattle_911)
 
 #Split Incident Location into Latitude_911 and Longitude_911
-Seattle_911 <- Seattle_911 %>%
-  mutate(Incident.Location = gsub("[()]", "", Incident.Location)) %>%
-  separate(Incident.Location, into = c("Latitude_911", "Longitude_911"), sep = ", ") 
+#Seattle_911 <- Seattle_911 %>%
+#  mutate(Incident.Location = gsub("[()]", "", Incident.Location)) %>%
+#  separate(Incident.Location, into = c("Latitude_911", "Longitude_911"), sep = ", ") 
 
 #Convert Latitude_911/Longitude_911 entries to numeric
 Seattle_911$Longitude_911 <- as.numeric(Seattle_911$Longitude_911)
 Seattle_911$Latitude_911 <- as.numeric(Seattle_911$Latitude_911)
 
-#(unique(Seattle_911$`Event.Clearance.Description`))
+Seattle_Weather <- Seattle_Weather %>%
+  mutate(DATE = as.Date(DATE, format = "%Y-%m-%d"))
+min_date <- min(Seattle_Weather$DATE, na.rm = TRUE)
+max_date <- max(Seattle_Weather$DATE, na.rm = TRUE)
+#number of events between min(Seattle_Weather$Date) and max(Seattle_Weather$Date)
+#min_date <- min(as.POSIXct(Seattle_Weather$DATE, format = "%m/%d/%Y %I:%M:%S %p", tz = "America/Los_Angeles"), na.rm = TRUE)
+#max_date <- max(as.POSIXct(Seattle_Weather$DATE, format = "%m/%d/%Y %I:%M:%S %p", tz = "America/Los_Angeles"), na.rm = TRUE)
+weather_event_count <- Seattle_911 %>%
+  filter(Event.Clearance.Date >= min_date & Event.Clearance.Date <= max_date) %>%
+  count()
 ```
 
+### Seattle 911 Dataset Investigation
+
 The Seattle 911 dataset contains data from `r min(Seattle_911$"Event.Clearance.Date", na.rm = TRUE)` through to `r max(Seattle_911$"Event.Clearance.Date", na.rm = TRUE)`.  During this period, `r length(Seattle_911$"CAD.Event.Number")` CAD events were recorded.
+
+The number of events that fall within the timeframe of the Weather data available are: `r (weather_event_count)`.
 
 
 ``` {r graphEventClearaceDescription, echo=FALSE, results="hide", message=FALSE, warning=TRUE}
@@ -286,26 +294,31 @@ group_event_counts <- event_counts %>%
   group_by(GroupedDescription) %>%
   summarise(total_count = sum(count , na.rm = TRUE))  
 
-event_counts_30 <- group_event_counts[1:30,]
+event_counts_30 <- group_event_counts[1:30,] %>%
+  arrange(GroupedDescription)
 # View the result
 print(event_counts)
 
+#find percentiles
+#group_event_counts %>%
+ ## group_by(GroupedDescription) %>%
+  #reframe(quant90  = quantile(total_count), probs = .9)
 #event_count_graph <- ggplot(event_counts,aes(GroupedDescription)) +
  # geom_bar(stat = identity, fill = "orange") +
 #  coord_flip() 
 #Sevent_count_graph  
 
-event_count_graph <- ggplot(event_counts_30, aes(x = GroupedDescription, y = total_count)) +
-  geom_col(fill = "orange") +
-  coord_flip() +
-  labs(title = "Event Count by Grouped Description",
-       x = "Grouped Description",
-       y = "Total Count") +
-  theme(axis.text.y = element_text(size = 8), # Reduce text size
-        axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis labels
+#event_count_graph <- ggplot(group_event_counts, aes(x = GroupedDescription, y = fct_infreq(total_count))) +
+ # geom_col(fill = "orange") +
+ # coord_flip() +
+ # labs(title = "Event Count by Grouped Description",
+  #     x = "Grouped Description",
+ #      y = "Total Count") +
+#  theme(axis.text.y = element_text(size = 8), # Reduce text size
+ #       axis.text.x = element_text(angle = 45, hjust = 1)) # Rotate x-axis labels
 
 # Print the graph
-print(event_count_graph)
+#print(event_count_graph)
 
 #event_counts_summary <- event_counts %>%
 #  group_by(GroupedDescription) %>%
